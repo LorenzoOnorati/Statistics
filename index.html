@@ -61,7 +61,7 @@
           <span>HMWK 1</span> &bull; <span>Toy Cryptography</span>
         </div>
         <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-          Toy ECC Key Gen: PRIVATE KEY &rarr; PUBLIC KEY
+          Toy ECC Key Gen
         </h1>
         <p class="text-xs sm:text-sm text-slate-600">
           Elliptic-curve scalar multiplication on <code class="font-mono text-red-600 font-semibold">y² ≡ x³ + 7 (mod 17)</code> with base point <code class="font-mono text-emerald-700 font-semibold">G = (1, 5)</code>
@@ -125,7 +125,7 @@
         </summary>
         <div class="mt-4 pt-3 border-t border-slate-100 text-xs sm:text-sm leading-relaxed text-slate-700 space-y-3 font-normal">
           <p>
-            To understand how points behave on an elliptic curve, we can study some basic statistical properties. These include the distribution of coordinates, the frequency of individual values, how bits are distributed, and any correlations between the input scalar and the coordinates of the resulting point. These analyses help us find possible patterns or anomalies in the observed sequence.
+            To understand how points behave on an elliptic curve we can study some basic statistical properties. These include the distribution of coordinates, the frequency of individual values, how bits are distributed, and any correlations between the input scalar and the coordinates of the resulting point. These analyses help us find possible patterns or anomalies in the observed sequence.
           </p>
           <p>
             However, an apparently uniform distribution or the absence of clear correlations is not enough to prove cryptographic security. In scalar multiplication <code class="font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 font-semibold text-slate-800">Q = kP</code>, the essential property is that finding the scalar <code class="font-mono font-semibold text-slate-800">k</code> from points <code class="font-mono font-semibold text-slate-800">P</code> and <code class="font-mono font-semibold text-slate-800">Q</code> is computationally very hard. This is known as the Elliptic Curve Discrete Logarithm Problem (ECDLP) (RFC 6090, §§ 3.3.2, 4.2, and 10).
@@ -137,7 +137,6 @@
             In addition, we must separate this property from the properties of cryptographic hash functions. Hash functions are built to provide collision resistance, preimage resistance, and second preimage resistance, as well as a strong diffusion effect usually called the avalanche effect. Even though we can test some of these properties with statistical tools, these tests alone cannot prove that a system is secure.
           </p>
           <p class="text-slate-800 font-medium bg-red-50/60 border border-red-200 rounded-lg p-3">
-            Therefore, studying the coordinates of elliptic curve points is an empirical analysis of statistical properties. It is completely different from a formal proof of how hard it is to invert scalar multiplication, and it is also different from verifying the specific security requirements of hash functions.
           </p>
         </div>
       </details>
