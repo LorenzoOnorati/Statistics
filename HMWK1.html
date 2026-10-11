@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HMWK 1 — Public-Key Cryptography: Private Key to Public Key</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['Fira Code', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #ffffff;
+      color: #1e293b;
+    }
+    .grid-point {
+      transition: all 0.2s ease-in-out;
+      cursor: pointer;
+    }
+    .grid-point:hover {
+      r: 8px;
+    }
+    /* Minimalist scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-white text-slate-800 antialiased font-sans selection:bg-red-100 selection:text-red-800">
+
+  <header class="border-b border-slate-200 bg-white sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 py-3 sm:px-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div>
+        <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 mb-1">
+          <span>HMWK 1</span> &bull; <span>Toy Cryptography</span>
+        </div>
+        <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+          Toy ECC Key Gen: PRIVATE KEY &rarr; PUBLIC KEY
+        </h1>
+        <p class="text-xs sm:text-sm text-slate-600">
+          Elliptic-curve scalar multiplication on <code class="font-mono text-red-600 font-semibold">y² ≡ x³ + 7 (mod 17)</code> with base point <code class="font-mono text-emerald-700 font-semibold">G = (1, 5)</code>
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2 text-xs font-mono">
+        <div class="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg text-slate-700">
+          <span>Curve: </span><span class="font-bold text-slate-900">a=0, b=7, p=17</span>
+        </div>
+        <div class="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg text-slate-700">
+          <span>Subgroup Order: </span><span id="headerOrderBadge" class="font-bold text-red-600">n = 9</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 sm:px-6 space-y-6">
+
+    <!-- Homework Notes Banner -->
+    <section class="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-5 text-sm leading-relaxed text-slate-700">
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-2">
+        <i class="fa-solid fa-circle-info text-red-600"></i> Cryptographic Foundation &amp; Notes
+      </h2>
+      <p>
+        Elliptic-curve scalar multiplication is a <strong>cryptographic one-way function</strong>. 
+        It is deterministic and simple to compute in the forward direction (<code class="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-red-700 font-semibold">k &rarr; Q = k·G</code>), 
+        while recovering the secret private key <code class="font-mono font-semibold">k</code> from the public point <code class="font-mono font-semibold">Q</code> is computationally infeasible (ECDLP). 
+        Here, we explore these group laws on a tractable finite field <code class="font-mono">𝔽₁₇</code>.
+      </p>
+    </section>
+
+    <!-- Reference & Statistical Analysis Collapsible Dropdown -->
+    <section class="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 text-xs sm:text-sm text-slate-700">
+        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <i class="fa-solid fa-book-bookmark text-red-600"></i>
+          <span>For the study of elliptic curves, I used this document as my main source:</span>
+          <a 
+            href="https://www.rfc-editor.org/info/rfc6090/" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            class="font-semibold text-red-600 hover:text-red-700 underline inline-flex items-center gap-1 transition"
+          >
+            <span>RFC 6090</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+          </a>
+        </div>
+      </div>
+
+      <details class="group mt-3">
+        <summary class="flex items-center justify-between cursor-pointer list-none text-xs sm:text-sm font-semibold text-slate-800 hover:text-red-600 transition select-none">
+          <span class="flex items-center gap-2">
+            <i class="fa-solid fa-chart-pie text-red-600"></i>
+            <span>Statistical Analysis of Points Generated by Scalar Multiplication</span>
+          </span>
+          <span class="text-xs font-mono text-slate-500 group-open:rotate-180 transition-transform duration-200 flex items-center gap-1">
+            <span class="text-[11px] font-sans text-slate-400 group-open:hidden">Click to expand</span>
+            <i class="fa-solid fa-chevron-down"></i>
+          </span>
+        </summary>
+        <div class="mt-4 pt-3 border-t border-slate-100 text-xs sm:text-sm leading-relaxed text-slate-700 space-y-3 font-normal">
+          <p>
+            To understand how points behave on an elliptic curve, we can study some basic statistical properties. These include the distribution of coordinates, the frequency of individual values, how bits are distributed, and any correlations between the input scalar and the coordinates of the resulting point. These analyses help us find possible patterns or anomalies in the observed sequence.
+          </p>
+          <p>
+            However, an apparently uniform distribution or the absence of clear correlations is not enough to prove cryptographic security. In scalar multiplication <code class="font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 font-semibold text-slate-800">Q = kP</code>, the essential property is that finding the scalar <code class="font-mono font-semibold text-slate-800">k</code> from points <code class="font-mono font-semibold text-slate-800">P</code> and <code class="font-mono font-semibold text-slate-800">Q</code> is computationally very hard. This is known as the Elliptic Curve Discrete Logarithm Problem (ECDLP) (RFC 6090, §§ 3.3.2, 4.2, and 10).
+          </p>
+          <p>
+            Security also depends on choosing good curve parameters. As stated in Section 3.3.2 of RFC 6090, the order of the subgroup generated by the base point must be divisible by a large prime number. This prevents attackers from finding easy ways to solve the discrete logarithm problem. The document also explains that bad parameter choices can make this problem much easier to solve: for instance, certain combinations of curve coefficients and finite field characteristics are considered weak for cryptography and should never be used (McGrew et al., 2011, § 3.3.2; [K1987]; [MOV1993]).
+          </p>
+          <p>
+            In addition, we must separate this property from the properties of cryptographic hash functions. Hash functions are built to provide collision resistance, preimage resistance, and second preimage resistance, as well as a strong diffusion effect usually called the avalanche effect. Even though we can test some of these properties with statistical tools, these tests alone cannot prove that a system is secure.
+          </p>
+          <p class="text-slate-800 font-medium bg-red-50/60 border border-red-200 rounded-lg p-3">
+            Therefore, studying the coordinates of elliptic curve points is an empirical analysis of statistical properties. It is completely different from a formal proof of how hard it is to invert scalar multiplication, and it is also different from verifying the specific security requirements of hash functions.
+          </p>
+        </div>
+      </details>
+    </section>
+
+    <!-- Key & Base Point Controls Grid -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+      <!-- Private Key Card -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-key text-red-600"></i> Private Key (k)
+            </h3>
+            <span class="text-xs font-mono px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">Secret Scalar</span>
+          </div>
+
+          <label for="kInput" class="block text-xs font-medium text-slate-600 mb-1">
+            Enter an integer scalar <code class="font-mono font-bold text-slate-900">k</code>:
+          </label>
+          <div class="flex gap-2 mb-3">
+            <input 
+              id="kInput" 
+              type="number" 
+              min="1" 
+              max="18" 
+              value="6"
+              class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-base font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              oninput="handleKeyChange(this.value)"
+            />
+            <button 
+              onclick="setRandomKey()" 
+              class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition"
+              title="Generate random k"
+            >
+              <i class="fa-solid fa-shuffle text-slate-500"></i>
+              <span>Random</span>
+            </button>
+          </div>
+
+          <!-- Quick presets -->
+          <div class="flex flex-wrap gap-1.5">
+            <button onclick="setKey(1)" class="px-2.5 py-1 text-xs rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-mono">k=1</button>
+            <button onclick="setKey(2)" class="px-2.5 py-1 text-xs rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-mono">k=2</button>
+            <button onclick="setKey(6)" class="px-2.5 py-1 text-xs rounded border border-red-300 bg-red-50 hover:bg-red-100 text-red-700 font-semibold font-mono">k=6 (Demo)</button>
+            <button onclick="setKey(8)" class="px-2.5 py-1 text-xs rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-mono">k=8</button>
+            <button onclick="setKey(9)" class="px-2.5 py-1 text-xs rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-mono">k=9</button>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500">
+          Scalar multiplication adds the base point <code class="font-mono text-emerald-700 font-semibold">G</code> to itself <code class="font-mono font-bold text-slate-800">k</code> times.
+        </div>
+      </div>
+
+      <!-- Statistical Exploration: Base Point Selector -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-compass text-red-600"></i> Base Point (G)
+            </h3>
+            <span class="text-xs font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Generator</span>
+          </div>
+
+          <label for="basePointSelect" class="block text-xs font-medium text-slate-600 mb-1">
+            Select a valid generator on <code class="font-mono text-slate-800">𝔽₁₇</code>:
+          </label>
+          <select 
+            id="basePointSelect" 
+            onchange="handleBasePointChange(this.value)"
+            class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 mb-3"
+          >
+            <!-- Dynamically populated -->
+          </select>
+
+          <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1 font-mono text-slate-700">
+            <div class="flex justify-between">
+              <span>Selected Point:</span>
+              <span id="basePointCoordsDisplay" class="font-bold text-emerald-700">(1, 5)</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Subgroup Order:</span>
+              <span id="subgroupOrderDisplay" class="font-bold text-red-600">n = 9 steps</span>
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200">
+              <span>Equation Check:</span>
+              <span id="basePointCheckDisplay">5² ≡ 1³ + 7 ≡ 8 (mod 17) ✓</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500">
+          Try selecting other points to observe different subgroup cyclic orders (Lagrange's Theorem: orders divide 18).
+        </div>
+      </div>
+
+      <!-- Public Key Output Card -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-lock-open text-red-600"></i> TOY PUBLIC KEY (Q)
+            </h3>
+            <span class="text-xs font-mono px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">Q = k·G</span>
+          </div>
+
+          <div class="bg-red-50/60 border border-red-200 rounded-xl p-4 my-2 text-center">
+            <div class="text-xs text-slate-500 uppercase tracking-wide font-mono mb-1">Public Key Coordinates</div>
+            <div id="publicKeyOutput" class="text-2xl sm:text-3xl font-mono font-bold text-red-600 tracking-wider">
+              (5, 8)
+            </div>
+            <div id="publicKeyBadge" class="mt-2 inline-block text-xs font-mono px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 font-semibold border border-red-300">
+              Valid Curve Point
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-600 leading-normal">
+          For private key <code id="kSummaryBadge" class="font-mono font-bold text-slate-900">k = 6</code>, the public key is <code id="qSummaryBadge" class="font-mono font-bold text-red-600">Q = (5, 8)</code>.
+        </div>
+      </div>
+
+    </section>
+
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left: SVG Coordinate Plane (7 Cols) -->
+      <div class="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div>
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-chart-line text-red-600"></i> Slow-Down Visual Algorithm (𝔽₁₇ × 𝔽₁₇)
+            </h3>
+            <p class="text-xs text-slate-500">Visual mapping of solutions satisfying <code class="font-mono text-slate-700">y² ≡ x³ + 7 mod 17</code></p>
+          </div>
+
+          <!-- Playback controls -->
+          <div class="flex items-center gap-2">
+            <button 
+              id="btnPlay" 
+              onclick="togglePlayback()" 
+              class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-xs font-semibold text-white shadow-sm transition flex items-center gap-1.5"
+            >
+              <i id="playIcon" class="fa-solid fa-play"></i>
+              <span id="playText">Play 1G &rarr; kG</span>
+            </button>
+            <button 
+              onclick="stepAnimation(1)" 
+              class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-700 transition"
+              title="Next step"
+            >
+              <i class="fa-solid fa-forward-step"></i>
+            </button>
+            <button 
+              onclick="resetPlayback()" 
+              class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-700 transition"
+              title="Reset"
+            >
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- SVG Plane Container -->
+        <div class="relative w-full aspect-square max-h-[460px] bg-slate-50 border border-slate-200 rounded-xl p-2 flex items-center justify-center overflow-hidden">
+          <svg id="gridSvg" class="w-full h-full" viewBox="0 0 540 540" xmlns="http://www.w3.org/2000/svg">
+            <!-- Dynamic elements generated in JavaScript -->
+          </svg>
+        </div>
+
+        <!-- Visual Legend -->
+        <div class="mt-4 pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-slate-600">
+          <div class="flex items-center gap-1.5">
+            <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 border border-emerald-600 inline-block"></span>
+            <span>Base Point G</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-3.5 h-3.5 rounded-full bg-red-600 border border-red-700 inline-block"></span>
+            <span>Public Key Q = kG</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded-full bg-amber-500 border border-amber-600 inline-block"></span>
+            <span>Active Step Point</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-slate-400 inline-block"></span>
+            <span>Curve Points</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Chain Table & Step Computations (5 Cols) -->
+      <div class="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-list-ol text-red-600"></i> Chain: G, 2G, 3G, ..., kG
+            </h3>
+            <span class="text-xs font-mono text-slate-500">n·G Multiples</span>
+          </div>
+          <p class="text-xs text-slate-500 mb-3">
+            Click on any row to inspect the chord/tangent slope and coordinate calculations.
+          </p>
+
+          <!-- Scrollable Table -->
+          <div class="border border-slate-200 rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
+            <table class="w-full text-left text-xs font-mono">
+              <thead class="bg-slate-100 border-b border-slate-200 text-slate-700 sticky top-0">
+                <tr>
+                  <th class="px-3 py-2 w-12 text-center">n</th>
+                  <th class="px-3 py-2">Multiple</th>
+                  <th class="px-3 py-2 text-right">Point (x, y)</th>
+                </tr>
+              </thead>
+              <tbody id="multiplesTableBody" class="divide-y divide-slate-100">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Active Step Calculation Breakdown Box -->
+        <div class="mt-4 pt-3 border-t border-slate-200">
+          <div class="flex items-center justify-between text-xs font-bold text-slate-800 mb-2">
+            <span>Algebraic Step Detail:</span>
+            <span id="detailStepBadge" class="text-red-600 font-mono">Step 1</span>
+          </div>
+          <div id="stepDetailBox" class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs font-mono text-slate-700 space-y-1.5">
+            <!-- Dynamic step formula breakdown -->
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+      <!-- How it Works: Step 1, 2, 3 -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-xs leading-relaxed space-y-2">
+        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-calculator text-red-600"></i> How it works (Point Addition)
+        </h3>
+        <p class="text-slate-600">
+          Each step in the chain adds <code class="font-mono text-emerald-700 font-semibold">G</code> to the previous point. To add two points <code class="font-mono">P = (x₁, y₁)</code> and <code class="font-mono">Q = (x₂, y₂)</code>:
+        </p>
+        <div class="space-y-2 pt-1">
+          <div class="p-2 rounded bg-slate-50 border border-slate-200">
+            <strong class="text-slate-800">Step 1 — Slope m:</strong>
+            <div class="text-slate-600 font-mono mt-0.5">Case A (Chord, P ≠ Q): <span class="text-red-600">m = (y₂ - y₁) ÷ (x₂ - x₁) mod 17</span></div>
+            <div class="text-slate-600 font-mono">Case B (Doubling, P = Q): <span class="text-red-600">m = (3·x₁² + 0) ÷ (2·y₁) mod 17</span></div>
+          </div>
+          <div class="p-2 rounded bg-slate-50 border border-slate-200 font-mono">
+            <strong class="text-slate-800">Step 2 — New x:</strong>
+            <div class="text-slate-600 mt-0.5"><span class="text-emerald-700">x₃ = m² - x₁ - x₂ mod 17</span></div>
+          </div>
+          <div class="p-2 rounded bg-slate-50 border border-slate-200 font-mono">
+            <strong class="text-slate-800">Step 3 — New y:</strong>
+            <div class="text-slate-600 mt-0.5"><span class="text-emerald-700">y₃ = m·(x₁ - x₃) - y₁ mod 17</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Point at Infinity Note -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-xs leading-relaxed space-y-2">
+        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-infinity text-red-600"></i> Point at Infinity (𝒪)
+        </h3>
+        <p class="text-slate-600">
+          If <code class="font-mono font-semibold">P</code> and <code class="font-mono font-semibold">Q</code> share the same <code class="font-mono">x</code> but opposite <code class="font-mono">y</code> (i.e., <code class="font-mono text-red-600">y₁ + y₂ ≡ 0 mod 17</code>), the chord is vertical.
+        </p>
+        <p class="text-slate-600">
+          The line never hits another affine point on the grid. The sum is therefore defined as the <strong>point at infinity</strong>, written as <code class="font-mono font-bold text-red-600">𝒪</code>.
+        </p>
+        <div class="p-3 bg-red-50/70 border border-red-200 rounded-lg text-slate-700 space-y-1">
+          <div>&bull; <code class="font-mono">P + 𝒪 = P</code> (Identity element)</div>
+          <div>&bull; For <code class="font-mono">G = (1, 5)</code>, <code class="font-mono">8G = (1, 12)</code>.</div>
+          <div>&bull; <code class="font-mono">9G = 8G + G = (1, 12) + (1, 5) = 𝒪</code>.</div>
+          <div>&bull; The cyclic group order of <code class="font-mono">G</code> is therefore exactly <strong>n = 9</strong>.</div>
+        </div>
+      </div>
+
+      <!-- Modular Inverse Reference Table (mod 17) -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-xs space-y-2">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-table text-red-600"></i> Inverse Reference (mod 17)
+          </h3>
+          <span class="text-[11px] font-mono text-slate-500">a &times; a⁻¹ &equiv; 1</span>
+        </div>
+        <p class="text-slate-600">
+          Division in <code class="font-mono">𝔽₁₇</code> means multiplying by the modular inverse:
+        </p>
+
+        <!-- Compact table grid -->
+        <div class="border border-slate-200 rounded-lg overflow-hidden font-mono text-[11px]">
+          <div class="grid grid-cols-8 bg-slate-100 text-slate-700 border-b border-slate-200 text-center font-bold py-1">
+            <span>&divide; by</span><span>&times; by</span>
+            <span>&divide; by</span><span>&times; by</span>
+            <span>&divide; by</span><span>&times; by</span>
+            <span>&divide; by</span><span>&times; by</span>
+          </div>
+          <div class="grid grid-cols-8 divide-x divide-y divide-slate-100 text-center py-1">
+            <span class="font-bold text-slate-800">1</span><span class="text-red-600 font-semibold">1</span>
+            <span class="font-bold text-slate-800">5</span><span class="text-red-600 font-semibold">7</span>
+            <span class="font-bold text-slate-800">9</span><span class="text-red-600 font-semibold">2</span>
+            <span class="font-bold text-slate-800">13</span><span class="text-red-600 font-semibold">4</span>
+
+            <span class="font-bold text-slate-800">2</span><span class="text-red-600 font-semibold">9</span>
+            <span class="font-bold text-slate-800">6</span><span class="text-red-600 font-semibold">3</span>
+            <span class="font-bold text-slate-800">10</span><span class="text-red-600 font-semibold">12</span>
+            <span class="font-bold text-slate-800">14</span><span class="text-red-600 font-semibold">11</span>
+
+            <span class="font-bold text-slate-800">3</span><span class="text-red-600 font-semibold">6</span>
+            <span class="font-bold text-slate-800">7</span><span class="text-red-600 font-semibold">5</span>
+            <span class="font-bold text-slate-800">11</span><span class="text-red-600 font-semibold">14</span>
+            <span class="font-bold text-slate-800">15</span><span class="text-red-600 font-semibold">8</span>
+
+            <span class="font-bold text-slate-800">4</span><span class="text-red-600 font-semibold">13</span>
+            <span class="font-bold text-slate-800">8</span><span class="text-red-600 font-semibold">15</span>
+            <span class="font-bold text-slate-800">12</span><span class="text-red-600 font-semibold">10</span>
+            <span class="font-bold text-slate-800">16</span><span class="text-red-600 font-semibold">16</span>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <script>
+    // --- PARAMETERS OF THE TOY CURVE ---
+    // y² ≡ x³ + 7 (mod 17), with a = 0, b = 7, p = 17
+    const P = 17;
+    const A = 0;
+    const B = 7;
+
+    // Default base point from homework
+    let currentG = { x: 1, y: 5 };
+    let currentK = 6;
+    let currentStepIndex = 5; // index in multiples array (0-based for k=6 is index 5)
+    let animationInterval = null;
+
+    // Precomputed modular inverse table mod 17
+    const INV_MOD_17 = {
+      1: 1,  2: 9,  3: 6,  4: 13,
+      5: 7,  6: 3,  7: 5,  8: 15,
+      9: 2,  10: 12, 11: 14, 12: 10,
+      13: 4, 14: 11, 15: 8, 16: 16
+    };
+
+    // Helper: Proper modulo in F_17
+    function mod(n, m = P) {
+      return ((n % m) + m) % m;
+    }
+
+    // Modular inverse lookup / Extended Euclidean fallback
+    function modInverse(val, p = P) {
+      val = mod(val, p);
+      if (val === 0) return null;
+      return INV_MOD_17[val] || null;
+    }
+
+    // Check if point is Point at Infinity
+    function isInfinity(pt) {
+      return pt === null || pt.isInfinity === true;
+    }
+
+    // Find all affine points on y² ≡ x³ + 7 mod 17
+    function getAllCurvePoints() {
+      const points = [];
+      for (let x = 0; x < P; x++) {
+        const rhs = mod(x * x * x + B, P);
+        for (let y = 0; y < P; y++) {
+          if (mod(y * y, P) === rhs) {
+            points.push({ x, y });
+          }
+        }
+      }
+      return points;
+    }
+
+    const ALL_CURVE_POINTS = getAllCurvePoints();
+
+    // Point Addition on y² ≡ x³ + 7 (mod 17)
+    // Follows exact homework definition:
+    // Case A: different points -> m = (y2 - y1) / (x2 - x1) mod 17
+    // Case B: same point (doubling) -> m = (3x1^2 + a) / (2y1) mod 17
+    // x3 = m^2 - x1 - x2 mod 17
+    // y3 = m*(x1 - x3) - y1 mod 17
+    function addPoints(P1, P2) {
+      if (isInfinity(P1)) {
+        return {
+          point: P2,
+          slope: null,
+          type: 'identity',
+          calc: 'Identity: 𝒪 + P = P'
+        };
+      }
+      if (isInfinity(P2)) {
+        return {
+          point: P1,
+          slope: null,
+          type: 'identity',
+          calc: 'Identity: P + 𝒪 = P'
+        };
+      }
+
+      // Vertical line: opposite y values or y=0
+      if (P1.x === P2.x && (mod(P1.y + P2.y, P) === 0 || P1.y === 0)) {
+        return {
+          point: { isInfinity: true },
+          slope: 'Infinity',
+          type: 'infinity',
+          calc: `x₁ = x₂ (${P1.x}) and y₁ + y₂ ≡ 0 (mod 17) &rarr; Vertical line &rarr; 𝒪`
+        };
+      }
+
+      let m;
+      let slopeText = '';
+
+      if (P1.x === P2.x && P1.y === P2.y) {
+        // Case B: Point Doubling (Tangent)
+        const num = mod(3 * P1.x * P1.x + A, P);
+        const den = mod(2 * P1.y, P);
+        const invDen = modInverse(den, P);
+        if (invDen === null) {
+          return { point: { isInfinity: true }, slope: 'Infinity', type: 'infinity', calc: 'Vertical tangent &rarr; 𝒪' };
+        }
+        m = mod(num * invDen, P);
+        slopeText = `m = (3·${P1.x}² + 0) ÷ (2·${P1.y}) = ${num} ÷ ${den} ≡ ${num}·${invDen} ≡ ${m} (mod 17)`;
+      } else {
+        // Case A: Point Addition (Chord)
+        const num = mod(P2.y - P1.y, P);
+        const den = mod(P2.x - P1.x, P);
+        const invDen = modInverse(den, P);
+        if (invDen === null) {
+          return { point: { isInfinity: true }, slope: 'Infinity', type: 'infinity', calc: `x₁ = x₂ &rarr; Vertical line &rarr; 𝒪` };
+        }
+        m = mod(num * invDen, P);
+        slopeText = `m = (${P2.y} - ${P1.y}) ÷ (${P2.x} - ${P1.x}) = ${num} ÷ ${den} ≡ ${num}·${invDen} ≡ ${m} (mod 17)`;
+      }
+
+      const x3 = mod(m * m - P1.x - P2.x, P);
+      const y3 = mod(m * (P1.x - x3) - P1.y, P);
+
+      return {
+        point: { x: x3, y: y3 },
+        slope: m,
+        slopeFormula: slopeText,
+        coordFormula: `x₃ = ${m}² - ${P1.x} - ${P2.x} ≡ ${x3};  y₃ = ${m}·(${P1.x} - ${x3}) - ${P1.y} ≡ ${y3} (mod 17)`,
+        type: 'point'
+      };
+    }
+
+    // Compute the chain: G, 2G, 3G, ..., kG
+    function computeChain(basePoint, kVal) {
+      const chain = [];
+      let current = basePoint;
+
+      chain.push({
+        n: 1,
+        point: basePoint,
+        operation: 'Base Point G',
+        slope: null,
+        detail: `Starting generator G = (${basePoint.x}, ${basePoint.y})`
+      });
+
+      for (let i = 2; i <= kVal; i++) {
+        const step = addPoints(current, basePoint);
+        current = step.point;
+        chain.push({
+          n: i,
+          point: current,
+          operation: `${i - 1}G + G = ${i}G`,
+          slope: step.slope,
+          slopeFormula: step.slopeFormula,
+          coordFormula: step.coordFormula,
+          detail: step.calc || step.coordFormula
+        });
+      }
+
+      return chain;
+    }
+
+    // Determine cyclic subgroup order of base point (Lagrange's Theorem: ord(G) | 18)
+    function getSubgroupOrder(basePoint) {
+      let pt = basePoint;
+      for (let i = 1; i <= 18; i++) {
+        if (isInfinity(pt)) return i;
+        const res = addPoints(pt, basePoint);
+        pt = res.point;
+      }
+      return 18;
+    }
+
+    // --- STREAMING_CHUNK:Rendering the SVG Coordinate Grid ---
+    function renderSvgGrid() {
+      const svg = document.getElementById('gridSvg');
+      svg.innerHTML = '';
+
+      const padding = 45;
+      const size = 540;
+      const width = size - 2 * padding;
+      const step = width / 16;
+
+      const toSvgX = (x) => padding + x * step;
+      const toSvgY = (y) => size - (padding + y * step);
+
+      // Draw Grid Lines & Numeric Axis Labels (0-16)
+      for (let i = 0; i < 17; i++) {
+        const xPos = toSvgX(i);
+        const yPos = toSvgY(i);
+
+        // Vertical line
+        const vLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        vLine.setAttribute('x1', xPos);
+        vLine.setAttribute('y1', padding);
+        vLine.setAttribute('x2', xPos);
+        vLine.setAttribute('y2', size - padding);
+        vLine.setAttribute('stroke', '#e2e8f0');
+        vLine.setAttribute('stroke-width', '1');
+        svg.appendChild(vLine);
+
+        // Horizontal line
+        const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        hLine.setAttribute('x1', padding);
+        hLine.setAttribute('y1', yPos);
+        hLine.setAttribute('x2', size - padding);
+        hLine.setAttribute('y2', yPos);
+        hLine.setAttribute('stroke', '#e2e8f0');
+        hLine.setAttribute('stroke-width', '1');
+        svg.appendChild(hLine);
+
+        // X coordinate labels
+        const xText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        xText.setAttribute('x', xPos);
+        xText.setAttribute('y', size - padding + 18);
+        xText.setAttribute('fill', '#64748b');
+        xText.setAttribute('font-size', '10');
+        xText.setAttribute('font-family', 'Fira Code');
+        xText.setAttribute('text-anchor', 'middle');
+        xText.textContent = i;
+        svg.appendChild(xText);
+
+        // Y coordinate labels
+        const yText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        yText.setAttribute('x', padding - 12);
+        yText.setAttribute('y', yPos + 3.5);
+        yText.setAttribute('fill', '#64748b');
+        yText.setAttribute('font-size', '10');
+        yText.setAttribute('font-family', 'Fira Code');
+        yText.setAttribute('text-anchor', 'end');
+        yText.textContent = i;
+        svg.appendChild(yText);
+      }
+
+      const chain = computeChain(currentG, currentK);
+      const activeStep = chain[Math.min(currentStepIndex, chain.length - 1)];
+      const activePoint = activeStep ? activeStep.point : null;
+      const finalPoint = chain[chain.length - 1].point;
+
+      // Draw vector connector for step addition if applicable
+      if (activeStep && activeStep.n > 1) {
+        const prevStep = chain[activeStep.n - 2];
+        if (prevStep && !isInfinity(prevStep.point) && !isInfinity(activeStep.point)) {
+          const conn = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          conn.setAttribute('x1', toSvgX(prevStep.point.x));
+          conn.setAttribute('y1', toSvgY(prevStep.point.y));
+          conn.setAttribute('x2', toSvgX(activeStep.point.x));
+          conn.setAttribute('y2', toSvgY(activeStep.point.y));
+          conn.setAttribute('stroke', '#f59e0b');
+          conn.setAttribute('stroke-width', '2');
+          conn.setAttribute('stroke-dasharray', '4,4');
+          conn.setAttribute('stroke-opacity', '0.7');
+          svg.appendChild(conn);
+        }
+      }
+
+      // Plot all valid curve points
+      ALL_CURVE_POINTS.forEach(pt => {
+        const cx = toSvgX(pt.x);
+        const cy = toSvgY(pt.y);
+
+        const isBase = pt.x === currentG.x && pt.y === currentG.y;
+        const isFinal = !isInfinity(finalPoint) && pt.x === finalPoint.x && pt.y === finalPoint.y;
+        const isActive = !isInfinity(activePoint) && pt.x === activePoint.x && pt.y === activePoint.y;
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', cx);
+        circle.setAttribute('cy', cy);
+        circle.setAttribute('class', 'grid-point');
+
+        if (isFinal && isBase && currentK === 1) {
+          circle.setAttribute('r', '7');
+          circle.setAttribute('fill', '#dc2626');
+          circle.setAttribute('stroke', '#10b981');
+          circle.setAttribute('stroke-width', '2.5');
+        } else if (isFinal) {
+          circle.setAttribute('r', '7.5');
+          circle.setAttribute('fill', '#dc2626');
+          circle.setAttribute('stroke', '#fecaca');
+          circle.setAttribute('stroke-width', '2');
+        } else if (isBase) {
+          circle.setAttribute('r', '7');
+          circle.setAttribute('fill', '#10b981');
+          circle.setAttribute('stroke', '#a7f3d0');
+          circle.setAttribute('stroke-width', '2');
+        } else if (isActive) {
+          circle.setAttribute('r', '6.5');
+          circle.setAttribute('fill', '#f59e0b');
+          circle.setAttribute('stroke', '#fde68a');
+          circle.setAttribute('stroke-width', '2');
+        } else {
+          circle.setAttribute('r', '4');
+          circle.setAttribute('fill', '#94a3b8');
+          circle.setAttribute('stroke', '#cbd5e1');
+          circle.setAttribute('stroke-width', '1');
+        }
+
+        circle.addEventListener('click', () => {
+          inspectGridPoint(pt);
+        });
+
+        svg.appendChild(circle);
+      });
+    }
+
+    function populateBasePointDropdown() {
+      const select = document.getElementById('basePointSelect');
+      if (!select) return;
+      select.innerHTML = '';
+
+      ALL_CURVE_POINTS.forEach((pt) => {
+        const opt = document.createElement('option');
+        opt.value = `${pt.x},${pt.y}`;
+        const order = getSubgroupOrder(pt);
+        opt.textContent = `G = (${pt.x}, ${pt.y}) — Subgroup Order: ${order}`;
+        if (pt.x === currentG.x && pt.y === currentG.y) {
+          opt.selected = true;
+        }
+        select.appendChild(opt);
+      });
+    }
+
+    function updatePublicOutputs() {
+      const kInput = document.getElementById('kInput');
+      if (kInput) kInput.value = currentK;
+      const kSummaryBadge = document.getElementById('kSummaryBadge');
+      if (kSummaryBadge) kSummaryBadge.textContent = `k = ${currentK}`;
+
+      const chain = computeChain(currentG, currentK);
+      const finalPt = chain[chain.length - 1].point;
+
+      const outputEl = document.getElementById('publicKeyOutput');
+      const badgeEl = document.getElementById('publicKeyBadge');
+      const summaryEl = document.getElementById('qSummaryBadge');
+
+      if (isInfinity(finalPt)) {
+        if (outputEl) {
+          outputEl.textContent = '𝒪 (Infinity)';
+          outputEl.className = 'text-2xl sm:text-3xl font-mono font-bold text-amber-600 tracking-wider';
+        }
+        if (badgeEl) {
+          badgeEl.textContent = 'Neutral Identity Element 𝒪';
+          badgeEl.className = 'mt-2 inline-block text-xs font-mono px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold border border-amber-300';
+        }
+        if (summaryEl) summaryEl.textContent = 'Q = 𝒪';
+      } else {
+        if (outputEl) {
+          outputEl.textContent = `(${finalPt.x}, ${finalPt.y})`;
+          outputEl.className = 'text-2xl sm:text-3xl font-mono font-bold text-red-600 tracking-wider';
+        }
+        if (badgeEl) {
+          badgeEl.textContent = 'Valid Curve Point';
+          badgeEl.className = 'mt-2 inline-block text-xs font-mono px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 font-semibold border border-red-300';
+        }
+        if (summaryEl) summaryEl.textContent = `Q = (${finalPt.x}, ${finalPt.y})`;
+      }
+
+      const order = getSubgroupOrder(currentG);
+      const subgroupOrderDisplay = document.getElementById('subgroupOrderDisplay');
+      if (subgroupOrderDisplay) subgroupOrderDisplay.textContent = `n = ${order} steps`;
+      const headerOrderBadge = document.getElementById('headerOrderBadge');
+      if (headerOrderBadge) headerOrderBadge.textContent = `n = ${order}`;
+      const basePointCoordsDisplay = document.getElementById('basePointCoordsDisplay');
+      if (basePointCoordsDisplay) basePointCoordsDisplay.textContent = `(${currentG.x}, ${currentG.y})`;
+
+      const lhs = mod(currentG.y * currentG.y, P);
+      const basePointCheckDisplay = document.getElementById('basePointCheckDisplay');
+      if (basePointCheckDisplay) {
+        basePointCheckDisplay.textContent = `${currentG.y}² ≡ ${currentG.x}³ + 7 ≡ ${lhs} (mod 17) ✓`;
+      }
+    }
+
+    function updateMultiplesTable() {
+      const tbody = document.getElementById('multiplesTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const chain = computeChain(currentG, currentK);
+
+      chain.forEach((step, idx) => {
+        const tr = document.createElement('tr');
+        const isSelected = idx === currentStepIndex;
+        const isFinal = idx === chain.length - 1;
+
+        tr.className = `cursor-pointer transition-colors ${
+          isSelected 
+            ? 'bg-red-50 text-red-900 font-semibold' 
+            : 'hover:bg-slate-50 text-slate-700'
+        }`;
+
+        const ptStr = isInfinity(step.point) 
+          ? '𝒪 (Infinity)' 
+          : `(${step.point.x}, ${step.point.y})`;
+
+        tr.innerHTML = `
+          <td class="px-3 py-2 text-center text-slate-500">${step.n}</td>
+          <td class="px-3 py-2 font-medium ${isFinal ? 'text-red-700 font-bold' : ''}">${step.operation}</td>
+          <td class="px-3 py-2 text-right ${isFinal ? 'text-red-700 font-bold' : 'text-slate-800'}">${ptStr}</td>
+        `;
+
+        tr.addEventListener('click', () => {
+          currentStepIndex = idx;
+          updateStepDetailView(step);
+          renderSvgGrid();
+          updateMultiplesTable();
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      const activeStep = chain[Math.min(currentStepIndex, chain.length - 1)];
+      updateStepDetailView(activeStep);
+    }
+
+    function updateStepDetailView(step) {
+      const badge = document.getElementById('detailStepBadge');
+      const box = document.getElementById('stepDetailBox');
+
+      if (!step || !badge || !box) return;
+
+      badge.textContent = `Step n = ${step.n} (${step.operation})`;
+
+      const ptStr = isInfinity(step.point) 
+        ? '<span class="text-red-600 font-bold">𝒪 (Point at Infinity)</span>' 
+        : `<span class="text-emerald-700 font-bold">(${step.point.x}, ${step.point.y})</span>`;
+
+      box.innerHTML = `
+        <div><strong class="text-slate-900">Operation:</strong> ${step.operation}</div>
+        <div><strong class="text-slate-900">Resulting Point:</strong> ${ptStr}</div>
+        ${step.slopeFormula ? `<div><strong class="text-slate-900">Step 1 (Slope m):</strong> <span class="text-red-600">${step.slopeFormula}</span></div>` : ''}
+        ${step.coordFormula ? `<div><strong class="text-slate-900">Step 2 &amp; 3 (x₃, y₃):</strong> <span class="text-slate-800">${step.coordFormula}</span></div>` : ''}
+        <div class="text-[11px] text-slate-500 border-t border-slate-200 pt-1 mt-1">${step.detail || ''}</div>
+      `;
+    }
+
+    // --- STREAMING_CHUNK:Event Handlers & Playback Control ---
+    function handleKeyChange(val) {
+      let num = parseInt(val, 10);
+      if (isNaN(num)) return;
+      if (num < 1) num = 1;
+      if (num > 18) num = 18;
+      setKey(num);
+    }
+
+    function setKey(kVal) {
+      currentK = parseInt(kVal, 10);
+      currentStepIndex = currentK - 1;
+      stopPlayback();
+      updatePublicOutputs();
+      updateMultiplesTable();
+      renderSvgGrid();
+    }
+
+    function setRandomKey() {
+      const order = getSubgroupOrder(currentG);
+      const rand = Math.floor(Math.random() * order) + 1;
+      setKey(rand);
+    }
+
+    function handleBasePointChange(coordStr) {
+      const parts = coordStr.split(',').map(s => parseInt(s.trim(), 10));
+      currentG = { x: parts[0], y: parts[1] };
+      currentStepIndex = currentK - 1;
+      stopPlayback();
+      updatePublicOutputs();
+      updateMultiplesTable();
+      renderSvgGrid();
+    }
+
+    function togglePlayback() {
+      if (animationInterval) {
+        stopPlayback();
+      } else {
+        startPlayback();
+      }
+    }
+
+    function startPlayback() {
+      const playIcon = document.getElementById('playIcon');
+      const playText = document.getElementById('playText');
+      playIcon.className = 'fa-solid fa-pause';
+      playText.textContent = 'Pause';
+
+      currentStepIndex = 0;
+      updateMultiplesTable();
+      renderSvgGrid();
+
+      animationInterval = setInterval(() => {
+        if (currentStepIndex < currentK - 1) {
+          currentStepIndex++;
+          updateMultiplesTable();
+          renderSvgGrid();
+        } else {
+          stopPlayback();
+        }
+      }, 700);
+    }
+
+    function stopPlayback() {
+      if (animationInterval) {
+        clearInterval(animationInterval);
+        animationInterval = null;
+      }
+      const playIcon = document.getElementById('playIcon');
+      const playText = document.getElementById('playText');
+      if (playIcon) playIcon.className = 'fa-solid fa-play';
+      if (playText) playText.textContent = 'Play 1G → kG';
+    }
+
+    function stepAnimation(delta) {
+      stopPlayback();
+      currentStepIndex = Math.max(0, Math.min(currentK - 1, currentStepIndex + delta));
+      updateMultiplesTable();
+      renderSvgGrid();
+    }
+
+    function resetPlayback() {
+      stopPlayback();
+      currentStepIndex = 0;
+      updateMultiplesTable();
+      renderSvgGrid();
+    }
+
+    function inspectGridPoint(pt) {
+      const chain = computeChain(currentG, currentK);
+      const match = chain.find(st => !isInfinity(st.point) && st.point.x === pt.x && st.point.y === pt.y);
+      const badge = document.getElementById('detailStepBadge');
+      const box = document.getElementById('stepDetailBox');
+
+      badge.textContent = `Point (${pt.x}, ${pt.y})`;
+      const lhs = mod(pt.y * pt.y, P);
+      const rhs = mod(pt.x * pt.x * pt.x + B, P);
+
+      box.innerHTML = `
+        <div><strong class="text-slate-900">Coordinates:</strong> (${pt.x}, ${pt.y})</div>
+        <div><strong class="text-slate-900">Equation check:</strong> y² ≡ ${lhs} ≡ x³ + 7 ≡ ${rhs} (mod 17) ✓</div>
+        <div><strong class="text-slate-900">Subgroup role:</strong> ${
+          match 
+            ? `<span class="text-red-600 font-bold">Matches multiple ${match.n}G</span>` 
+            : '<span class="text-slate-500">Curve solution outside current scalar range</span>'
+        }</div>
+      `;
+    }
+
+    // Initialize application on load
+    window.addEventListener('load', () => {
+      populateBasePointDropdown();
+      setKey(6);
+    });
+  </script>
+</body>
+</html>
